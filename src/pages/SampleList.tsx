@@ -1,255 +1,282 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileAudio, Clock, Hash, RefreshCw } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Pagination } from '@/components/Pagination';
+import { Loader2, ChevronsUpDown } from 'lucide-react';
+import { AudioPlayer } from '@/components/AudioPlayer';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { apiClient } from '@/lib/api';
-import { Sample, SampleStatus } from '@/types';
-import { useToast } from '@/hooks/use-toast';
+import { DatasetSample } from '@/types';
+
+import {API_BASE_URL} from '@/conf';
 
 const SampleList: React.FC = () => {
   const { datasetId } = useParams<{ datasetId: string }>();
-  const navigate = useNavigate();
-  const [samples, setSamples] = useState<Sample[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [limit] = useState(20);
-  const { toast } = useToast();
+  const [samples, setSamples] = useState<DatasetSample[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalSamples, setTotalSamples] = useState(0);
+  const [samplesLoading, setSamplesLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const statusColors: Record<SampleStatus, string> = {
-    [SampleStatus.NEW]: 'bg-status-info/20 text-status-info border-status-info/30',
-    [SampleStatus.IN_PROGRESS]: 'bg-status-processing/20 text-status-processing border-status-processing/30',
-    [SampleStatus.COMPLETED]: 'bg-status-success/20 text-status-success border-status-success/30',
-    [SampleStatus.REVIEWED]: 'bg-status-success/20 text-status-success border-status-success/30',
-  };
+  const itemsPerPage = 10;
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'UNREVIEWED' | 'APPROVED' | 'REJECTED'>('ALL');
+  const [search, setSearch] = useState('');
+  const [editingTexts, setEditingTexts] = useState<Record<number, string>>({});
+  const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [fromIndex, setFromIndex] = useState<number | null>(null);
+  const [toIndex, setToIndex] = useState<number | null>(null);
 
-  const statusLabels: Record<SampleStatus, string> = {
-    [SampleStatus.NEW]: 'Новый',
-    [SampleStatus.IN_PROGRESS]: 'В обработке',
-    [SampleStatus.COMPLETED]: 'Завершено',
-    [SampleStatus.REVIEWED]: 'Проверено',
-  };
-
-  const fetchSamples = async () => {
+  // Загружаем сэмплы
+  const loadSamples = useCallback(async () => {
     if (!datasetId) return;
-    
-    setIsLoading(true);
+    setSamplesLoading(true);
     try {
-      const response = await apiClient.getSamplesByDataset(
-        parseInt(datasetId),
-        page,
-        limit
+      const samplesData = await apiClient.fetchDatasetSamples(
+        Number(datasetId),
+        currentPage,
+        itemsPerPage,
+        filterStatus === 'ALL' ? undefined : filterStatus,
+        search,
+        fromIndex,
+        toIndex
       );
-      setSamples(response.samples);
-      setTotal(response.total);
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Ошибка загрузки",
-        description: error instanceof Error ? error.message : "Не удалось загрузить образцы",
+      setSamples(samplesData.samples);
+      setTotalSamples(samplesData.total);
+      setTotalPages(Math.ceil(samplesData.total / itemsPerPage));
+      const newEditing: Record<number, string> = {};
+      samplesData.samples.forEach((s) => {
+        newEditing[s.id] = s.text;
       });
+      setEditingTexts(newEditing);
+    } catch (e: any) {
+      setError(e.message || 'Ошибка загрузки сэмплов');
     } finally {
-      setIsLoading(false);
+      setSamplesLoading(false);
+    }
+  }, [datasetId, currentPage, itemsPerPage, filterStatus, search, fromIndex, toIndex]);
+
+  useEffect(() => {
+    loadSamples();
+  }, [loadSamples]);
+
+  const handlePageChange = (page: number) => setCurrentPage(page);
+
+  const getAudioUrl = (filename: string) => {
+    if (!datasetId) return '';
+    return `${API_BASE_URL}/audio/stream?dataset_id=${datasetId}&filename=${encodeURIComponent(filename)}`;
+  };
+
+  const handleApprove = async (sample: DatasetSample) => {
+    setActionLoading((prev) => ({ ...prev, [sample.id]: true }));
+    try {
+      window.dispatchEvent(new Event('pauseAllAudio'));
+      if (editingTexts[sample.id] !== sample.text) {
+        await apiClient.updateSampleText(sample.id, editingTexts[sample.id]);
+      }
+      await apiClient.approveSample(sample.id);
+      await loadSamples(); // 🔥 обновляем список
+    } catch (e) {
+      alert('Ошибка при approve: ' + (e as any).message);
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [sample.id]: false }));
     }
   };
 
-  useEffect(() => {
-    fetchSamples();
-  }, [datasetId, page]);
-
-  const formatDuration = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  const handleReject = async (sample: DatasetSample) => {
+    setActionLoading((prev) => ({ ...prev, [sample.id]: true }));
+    try {
+      window.dispatchEvent(new Event('pauseAllAudio'));
+      await apiClient.rejectSample(sample.id);
+      await loadSamples(); // 🔥 обновляем список
+    } catch (e) {
+      alert('Ошибка при reject: ' + (e as any).message);
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [sample.id]: false }));
+    }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const totalPages = Math.ceil(total / limit);
-
-  if (!datasetId) {
+  if (error) {
     return (
-      <div className="p-6">
-        <div className="text-center">
-          <p className="text-destructive">Не указан ID датасета</p>
-          <Button onClick={() => navigate('/')}>Вернуться к датасетам</Button>
-        </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-red-500">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            onClick={() => navigate('/')}
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        {/* Filters */}
+        <div className="flex flex-col bg-card/80 shadow-lg rounded-2xl sm:p-6 border border-border md:flex-row gap-2 md:gap-4 items-stretch mb-2">
+          <div className="w-full md:w-1/2 h-full">
+            <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={filterOpen}
+                  className="w-full h-12 justify-between bg-white dark:bg-black border hover:none border-black/20"
+                >
+                  {filterStatus === 'ALL'
+                    ? 'All Samples'
+                    : filterStatus === 'UNREVIEWED'
+                    ? 'Not processed'
+                    : filterStatus === 'APPROVED'
+                    ? 'Approved'
+                    : 'Rejected'}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0 bg-white dark:bg-black overflow-hidden">
+                <div className="flex flex-col">
+                  {['ALL', 'UNREVIEWED', 'APPROVED', 'REJECTED'].map((status) => (
+                    <button
+                      key={status}
+                      className="px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-800"
+                      onClick={() => {
+                        setFilterStatus(status as any);
+                        setFilterOpen(false);
+                      }}
+                    >
+                      {status === 'ALL'
+                        ? 'All Samples'
+                        : status === 'UNREVIEWED'
+                        ? 'Not processed'
+                        : status === 'APPROVED'
+                        ? 'Approved'
+                        : 'Rejected'}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <div className="w-full h-full md:w-1/2 flex gap-2">
+            <Input
+              type="number"
+              min={0}
+              placeholder="From index"
+              value={fromIndex ?? ''}
+              onChange={(e) => setFromIndex(e.target.value ? Number(e.target.value) : null)}
+              className="w-1/2 h-12 bg-white border border-black/20 dark:bg-black"
+            />
+            <Input
+              type="number"
+              min={0}
+              placeholder="To index"
+              value={toIndex ?? ''}
+              onChange={(e) => setToIndex(e.target.value ? Number(e.target.value) : null)}
+              className="w-1/2 h-12 bg-white border border-black/20 dark:bg-black"
+            />
+          </div>
+
+          <div className="w-full h-full md:w-1/2">
+            <Input
+              placeholder="Поиск по тексту или имени файла..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-12 bg-white border border-black/20 dark:bg-black"
+            />
+          </div>
+        </div>
+
+        {/* Samples */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Аудио сэмплы</h2>
+            <div className="text-sm text-muted-foreground">
+              Страница {currentPage} из {totalPages} • Всего: {totalSamples}
+            </div>
+          </div>
+
+          {samplesLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : samples.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">Сэмплы не найдены</div>
+          ) : (
+            <div className="space-y-4">
+              {samples.map((sample) => (
+          <Card
+            key={sample.id}
+            className="w-full rounded-2xl border border-black/10 shadow-md hover:shadow-lg transition-all 
+                      bg-white dark:bg-neutral-900 dark:border-white/10 dark:shadow-black/40"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Назад к датасетам
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Образцы датасета #{datasetId}</h1>
-            <p className="text-foreground-muted">
-              Аудио сегменты для анотации и проверки
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button onClick={fetchSamples} variant="secondary" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Обновить
-          </Button>
-        </div>
-      </div>
+            <CardContent className="p-6 space-y-5">
+              {/* Аудио */}
+              <div className="border-b pb-4 border-black/10 dark:border-white/10">
+                <AudioPlayer src={getAudioUrl(sample.filename)} />
+              </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Hash className="h-5 w-5 text-primary" />
+              {/* Имя файла */}
+              <div className="text-sm text-black dark:text-gray-200">
+                {sample.filename.replace(/\.wav$/, '')}
               </div>
-              <div>
-                <p className="text-sm text-foreground-muted">Всего образцов</p>
-                <p className="text-2xl font-bold">{total}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center">
-                <FileAudio className="h-5 w-5 text-accent" />
-              </div>
-              <div>
-                <p className="text-sm text-foreground-muted">Страница</p>
-                <p className="text-2xl font-bold">{page} из {totalPages}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              {/* Текст + кнопки */}
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-stretch">
+                <Textarea
+                  className="flex-1 min-w-0 resize-none border border-black/[0.15] bg-white text-sm rounded-xl p-3
+                            dark:bg-neutral-800 dark:border-white/20 dark:text-gray-100 dark:placeholder-gray-400"
+                  value={editingTexts[sample.id] ?? sample.text ?? ''}
+                  placeholder="Еще не семплировано"
+                  onChange={(e) =>
+                    setEditingTexts((prev) => ({ ...prev, [sample.id]: e.target.value }))
+                  }
+                />
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-brand-secondary/10 rounded-lg flex items-center justify-center">
-                <Clock className="h-5 w-5 text-brand-secondary" />
-              </div>
-              <div>
-                <p className="text-sm text-foreground-muted">На странице</p>
-                <p className="text-2xl font-bold">{samples.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                <div className="flex flex-row md:flex-col gap-2 md:gap-3 justify-end min-w-[120px]">
+                  <Button
+                    variant="default"
+                    className="bg-green-700 text-white hover:bg-green-800
+                              dark:bg-green-800 dark:hover:bg-green-900"
+                    onClick={() => handleApprove(sample)}
+                    disabled={actionLoading[sample.id]}
+                  >
+                    {actionLoading[sample.id] ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      'Approve'
+                    )}
+                  </Button>
 
-      {/* Samples List */}
-      <div className="space-y-4">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        ) : samples.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileAudio className="h-12 w-12 text-foreground-muted mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Образцы не найдены</h3>
-              <p className="text-foreground-muted text-center">
-                В данном датасете пока нет обработанных образцов
-              </p>
+                  <Button
+                    variant="outline"
+                    className="bg-red-800 text-white hover:bg-red-900
+                              dark:bg-red-900 dark:hover:bg-red-950"
+                    onClick={() => handleReject(sample)}
+                    disabled={actionLoading[sample.id]}
+                  >
+                    {actionLoading[sample.id] ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      'Reject'
+                    )}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
-        ) : (
-          <div className="grid gap-3">
-            {samples.map((sample) => (
-              <Card key={sample.id} className="hover:shadow-card transition-all duration-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-gradient-accent rounded-lg flex items-center justify-center">
-                        <FileAudio className="h-6 w-6 text-primary" />
-                      </div>
-                      
-                      <div className="space-y-1">
-                        <h3 className="font-medium">{sample.filename}</h3>
-                        <div className="flex items-center space-x-4 text-sm text-foreground-muted">
-                          <span className="flex items-center">
-                            <Clock className="h-3 w-3 mr-1" />
-                            {formatDuration(sample.duration)}
-                          </span>
-                          <span>ID: {sample.id}</span>
-                          <span>{formatDate(sample.created_at)}</span>
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center space-x-3">
-                      <Badge className={statusColors[sample.status]} variant="outline">
-                        {statusLabels[sample.status]}
-                      </Badge>
-                    </div>
-                  </div>
+              ))}
+            </div>
+          )}
 
-                  {/* Transcription text if available */}
-                  {sample.text && (
-                    <div className="mt-3 p-3 bg-background-muted rounded-lg">
-                      <p className="text-sm font-medium mb-1">Транскрипция:</p>
-                      <p className="text-sm text-foreground-muted italic">
-                        "{sample.text}"
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center space-x-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setPage(page - 1)}
-            disabled={page === 1 || isLoading}
-          >
-            Предыдущая
-          </Button>
-          
-          <span className="text-sm text-foreground-muted px-4">
-            Страница {page} из {totalPages}
-          </span>
-          
-          <Button
-            variant="secondary" 
-            size="sm"
-            onClick={() => setPage(page + 1)}
-            disabled={page === totalPages || isLoading}
-          >
-            Следующая
-          </Button>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center">
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

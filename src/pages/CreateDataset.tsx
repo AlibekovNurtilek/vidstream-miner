@@ -82,9 +82,6 @@ const CreateDataset: React.FC = () => {
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       {/* Header */}
       <div className="text-center space-y-2">
-        <div className="w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center mx-auto">
-          <Plus className="h-8 w-8 text-white" />
-        </div>
         <h1 className="text-3xl font-bold">Создать новый датасет</h1>
         <p className="text-foreground-muted">
           Добавьте YouTube видео для автоматической обработки и создания датасета
@@ -214,7 +211,6 @@ const CreateDataset: React.FC = () => {
           </form>
         </CardContent>
       </Card>
-
       {/* Additional Info */}
       <div className="bg-background-muted rounded-lg p-4 space-y-2">
         <h3 className="font-medium">Этапы обработки:</h3>

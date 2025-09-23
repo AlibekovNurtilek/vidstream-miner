@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useState } from 'react';
 import { 
   Database, 
   Plus, 
@@ -7,7 +8,9 @@ import {
   BarChart3,
   Youtube,
   LogOut,
-  ChevronRight
+  ChevronRight,
+  ChevronUp,
+  User
 } from 'lucide-react';
 import {
   Sidebar,
@@ -22,7 +25,6 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types';
 
@@ -31,6 +33,8 @@ const AppSidebar: React.FC = () => {
   const isCollapsed = state === 'collapsed';
   const location = useLocation();
   const { user, logout, isAdmin } = useAuth();
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
 
   const navigationItems = [
     {
@@ -53,13 +57,13 @@ const AppSidebar: React.FC = () => {
       roles: [UserRole.ADMIN],
       adminOnly: true,
     },
-    {
-      title: 'Статистика',
-      url: '/statistics',
-      icon: BarChart3,
-      roles: [UserRole.ADMIN],
-      adminOnly: true,
-    },
+    // {
+    //   title: 'Статистика',
+    //   url: '/statistics',
+    //   icon: BarChart3,
+    //   roles: [UserRole.ADMIN],
+    //   adminOnly: true,
+    // },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -82,9 +86,9 @@ const AppSidebar: React.FC = () => {
     <Sidebar collapsible="icon">
       {/* Header */}
       <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center space-x-3 p-4">
+        <div className="flex items-center space-x-3 py-4 pl-0 ">
           <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
-            <Youtube className="h-5 w-5 text-sidebar-primary-foreground" />
+            <Youtube className="h-4 w-4 text-sidebar-primary-foreground" />
           </div>
           {!isCollapsed && (
             <div className="flex-1 min-w-0">
@@ -131,32 +135,49 @@ const AppSidebar: React.FC = () => {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-
+      
       {/* Footer */}
-      <SidebarFooter className="border-t border-sidebar-border">
-        <div className="p-4 space-y-3">
-          {/* User Info */}
+      <SidebarFooter className="border-t border-gray-800 bg-black">
+        <div className="">
+          {/* User Card */}
           {!isCollapsed && user && (
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-sidebar-foreground">
-                {user.username}
-              </p>
-              <p className="text-xs text-sidebar-foreground/70 capitalize">
-                {user.role}
-              </p>
+            <div className="relative">
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="w-full flex items-center space-x-3 p-3 bg-gray-900 rounded-md hover:bg-gray-800 transition-colors"
+              >
+                <div className="flex-shrink-0 w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center">
+                  <User className="h-4 w-4 text-white" />
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-medium text-white truncate">
+                    {user.username}
+                  </p>
+                </div>
+                <ChevronUp className={`h-4 w-4 text-gray-400 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {/* Dropdown Menu */}
+              {isUserMenuOpen && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-900 border border-gray-800 rounded-md shadow-lg">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center space-x-2 p-3 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors rounded-lg"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span className="text-sm font-medium">Выйти</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
           
-          {/* Logout Button */}
-          <Button
-            variant="secondary"
-            size={isCollapsed ? "sm" : "default"}
-            onClick={handleLogout}
-            className="w-full justify-start bg-sidebar-accent hover:bg-destructive hover:text-destructive-foreground"
-          >
-            <LogOut className="h-4 w-4 flex-shrink-0" />
-            {!isCollapsed && <span className="ml-2">Выйти</span>}
-          </Button>
+          {/* Collapsed State */}
+          {isCollapsed && user && (
+            <div className="flex-shrink-0 w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center">
+                <User className="h-4 w-4 text-white" />
+            </div>
+          )}
         </div>
       </SidebarFooter>
     </Sidebar>

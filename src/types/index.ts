@@ -54,6 +54,8 @@ export interface Dataset {
 export interface DatasetsResponse {
   items: Dataset[];
   total: number;
+  page: number;
+  limit: number;
 }
 
 export interface DatasetFilters {
@@ -62,7 +64,7 @@ export interface DatasetFilters {
   created_from?: string;
   created_to?: string;
   limit?: number;
-  offset?: number;
+  page?: number;
 }
 
 export enum SampleStatus {
@@ -98,4 +100,29 @@ export interface CreateDatasetRequest {
 
 export interface ApiError {
   detail: string;
+}
+
+export interface TranscribeResponse {
+  message: string;
+  task_id: string;
+}
+
+export interface DatasetSample {
+  dataset_id: number;
+  speaker_id: number;
+  filename: string;
+  text: string;
+  start_time: number | null;
+  end_time: number | null;
+  duration: number;
+  id: number;
+  created_at: string;
+  status: string;
+}
+
+export interface DatasetSamplesResponse {
+  page: number;
+  limit: number;
+  total: number;
+  samples: DatasetSample[];
 }

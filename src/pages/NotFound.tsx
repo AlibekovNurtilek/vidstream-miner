@@ -1,10 +1,10 @@
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
 const NotFound = () => {
   const location = useLocation();
-
+  const navigate = useNavigate();
   useEffect(() => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);
@@ -21,11 +21,10 @@ const NotFound = () => {
         </div>
         
         <div className="space-y-3">
-          <Button asChild className="bg-primary hover:bg-primary-hover">
-            <a href="/">Вернуться на главную</a>
+          <Button asChild className="bg-primary hover:bg-primary-hover cursor-pointer" onClick={() => navigate("/")}>
+            <p>Вернуться на главную</p>
           </Button>
           <p className="text-sm text-foreground-muted">
-            Путь: {location.pathname}
           </p>
         </div>
       </div>
