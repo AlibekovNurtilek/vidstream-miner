@@ -115,39 +115,42 @@ const DatasetList: React.FC = () => {
     };
   }, [datasets]);
 
-  useEffect(() => {
-    const completedIds = Object.entries(wsProgress)
-      .filter(([_, progress]) => progress.progress === 100)
-      .map(([id]) => parseInt(id));
+ useEffect(() => {
+  const completedIds = Object.entries(wsProgress)
+    .filter(([_, progress]) => progress.progress === 100)
+    .map(([id]) => parseInt(id));
 
-    if (completedIds.length === 0) return;
+  if (completedIds.length === 0) return;
 
-    const disconnectAndUpdate = async () => {
-      await Promise.all(
-        completedIds.map(async (id) => {
-          try {
-            wsConnections.current[id]?.disconnect();
-            delete wsConnections.current[id];
+  const disconnectAndUpdate = async () => {
+    await Promise.all(
+      completedIds.map(async (id) => {
+        try {
+          wsConnections.current[id]?.disconnect();
+          delete wsConnections.current[id];
 
-            setWsProgress(prev => {
-              const newProgress = { ...prev };
-              delete newProgress[id];
-              return newProgress;
-            });
+          setWsProgress(prev => {
+            const newProgress = { ...prev };
+            delete newProgress[id];
+            return newProgress;
+          });
 
-            const updatedDataset = await apiClient.fetchDataset(id);
-             setDatasets(prev =>
-              prev.map(ds => (ds.id === id ? updatedDataset : ds))
-            );
-          } catch (e: any) {
-            console.error(`Ошибка при обновлении датасета ${id}:`, e.message);
-          }
-        })
-      );
-    };
+          // Ждем 500мс чтобы сервер успел обновиться
+          await new Promise(resolve => setTimeout(resolve, 500));
 
-    disconnectAndUpdate();
-  }, [wsProgress]);
+          const updatedDataset = await apiClient.fetchDataset(id);
+          setDatasets(prev =>
+            prev.map(ds => (ds.id === id ? updatedDataset : ds))
+          );
+        } catch (e: any) {
+          console.error(`Ошибка при обновлении датасета ${id}:`, e.message);
+        }
+      })
+    );
+  };
+
+  disconnectAndUpdate();
+}, [wsProgress]);
 
   const fetchDatasets = async () => {
     setIsLoading(true);
@@ -194,7 +197,7 @@ const DatasetList: React.FC = () => {
       toast({
         title: "Транскрипция запущена",
         description: `${response.message} (${modelName})`,
-        duration: 3000,
+        duration: 1000,
         className: "bg-green-500 text-white",
       });
 
@@ -216,7 +219,7 @@ const DatasetList: React.FC = () => {
         title: "Ошибка",
         description: error.message || 'Не удалось запустить транскрипцию',
         variant: "destructive",
-        duration: 3000,
+        duration: 1000,
       });
     }
   };

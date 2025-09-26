@@ -13,7 +13,7 @@ import { apiClient } from '@/lib/api';
 const CreateDataset: React.FC = () => {
   const [url, setUrl] = useState('');
   const [minDuration, setMinDuration] = useState([5]);
-  const [maxDuration, setMaxDuration] = useState([30]);
+  const [maxDuration, setMaxDuration] = useState([25]);
   const [isLoading, setIsLoading] = useState(false);
   const [urlError, setUrlError] = useState('');
   const { toast } = useToast();
@@ -165,8 +165,8 @@ const CreateDataset: React.FC = () => {
                   <Slider
                     value={maxDuration}
                     onValueChange={setMaxDuration}
-                    max={120}
-                    min={5}
+                    max={60}
+                    min={1}
                     step={1}
                     className="w-full"
                     disabled={isLoading}
