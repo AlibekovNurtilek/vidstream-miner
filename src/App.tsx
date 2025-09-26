@@ -13,7 +13,6 @@ import CreateDataset from "@/pages/CreateDataset";
 import UserManagement from "@/pages/UserManagement";
 import Statistics from "@/pages/Statistics";
 import SampleList from "@/pages/SampleList";
-import { UserRole } from "@/types";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();

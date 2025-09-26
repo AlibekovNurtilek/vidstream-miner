@@ -5,13 +5,13 @@ import {
   Database, 
   Plus, 
   Users, 
-  BarChart3,
   Youtube,
   LogOut,
   ChevronRight,
   ChevronUp,
-  User
-} from 'lucide-react';
+  User,
+}
+from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,

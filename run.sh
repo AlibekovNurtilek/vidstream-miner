@@ -1,0 +1,1 @@
+nohup npm run preview -- --port 8440 > web.log 2>&1 &

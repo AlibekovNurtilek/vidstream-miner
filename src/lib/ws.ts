@@ -1,4 +1,5 @@
-export const BASE_WS = "ws://localhost:8000/ws"
+import {API_BASE_URL} from '@/conf';
+export const BASE_WS = `${API_BASE_URL}/ws`;
 export interface WebSocketProgress {
   dataset_id: number;
   task: string;
